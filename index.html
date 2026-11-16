@@ -43,6 +43,25 @@
 .condition-detail{background:#f7f9ff;border:1px solid #e1e7fc;border-radius:12px;margin-top:10px;padding:12px}.condition-detail[hidden],.clinical-review[hidden],.clinical-meal-note[hidden]{display:none!important}
 .condition-more{margin-top:11px;border:1px solid #e4e9f6;border-radius:12px;background:#fff;overflow:hidden}.condition-more summary{cursor:pointer;padding:11px 12px;color:#435a86;font-size:12px;font-weight:750;display:flex;align-items:center;justify-content:space-between;gap:8px;list-style:none}.condition-more summary::-webkit-details-marker{display:none}.condition-more summary:after{content:'⌄';color:var(--blue);font-size:18px}.condition-more[open] summary:after{content:'⌃'}.condition-more-body{padding:3px 12px 13px;border-top:1px solid #eef1f8}.condition-pill{display:inline-block;background:#f0f3ff;color:#5770b6;border-radius:12px;padding:4px 8px;font-size:10px;margin-left:auto}.condition-more .chip{font-size:10.5px}.condition-more .chip[hidden]{display:none!important}
 .clinical-review{border:1px solid #e7cc94;background:#fff8ec;border-radius:15px;padding:14px 17px;color:#74552a;font-size:12px;line-height:1.65}.clinical-review strong{display:block;color:#775023;font-size:13px;margin-bottom:6px}.clinical-review ul{margin:0;padding-left:19px}.clinical-meal-note{background:#f5f7ff;border:1px solid #dfe7fd;border-radius:12px;padding:12px 14px;font-size:11px;color:#4c607f;line-height:1.65;margin-top:12px}.clinical-meal-note strong{color:#2d4780}.clinical-meal-note ul{margin:5px 0 0;padding-left:18px}
+
+/* Desktop: one viewport, with independent patient-input and result scrolling. */
+@media screen and (min-width:731px){
+ body{height:100dvh;overflow:hidden}
+ .shell{height:100dvh;min-height:0;display:flex;flex-direction:column;padding-bottom:15px}
+ .top,.headerline,.footer{flex:none}
+ .workspace{flex:1;min-height:0;height:auto;overflow:hidden;align-items:stretch}
+ .input-panel,.right{position:static;top:auto;height:100%;min-height:0;max-height:100%;overflow-y:auto;overscroll-behavior-y:contain;scrollbar-gutter:stable}
+ .input-panel{overflow-x:hidden}
+ .right{overflow-x:hidden;align-content:start;padding:0 7px 13px 0}
+ .input-panel::-webkit-scrollbar,.right::-webkit-scrollbar{width:8px}
+ .input-panel::-webkit-scrollbar-thumb,.right::-webkit-scrollbar-thumb{background:#d7def0;border:2px solid transparent;border-radius:20px;background-clip:padding-box}
+ .input-panel::-webkit-scrollbar-track,.right::-webkit-scrollbar-track{background:transparent}
+}
+@media screen and (min-width:731px) and (max-height:570px){
+ body{height:auto;overflow:auto}
+ .shell{height:auto;min-height:570px}
+ .workspace{flex:none;height:350px}
+}
 </style></head><body>
 <div class="shell">
 <header class="top"><div class="logo"><span class="logomark"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div>nutri<span style="color:var(--blue)">scope</span><small>Clinical workspace</small></div></div><div class="header-right"><span class="tag">✦ One page · Offline</span><button class="action white" id="copy">⧉ Copy report</button><button class="action primary" id="print">▤ Export PDF</button></div></header>
@@ -245,7 +264,10 @@ function optimizePortions(){if(!values||!Number.isFinite(values.target)||values.
   }if(!change)break;
  }
 }
-function planAdjust(fullReset=false){if(!values)return;if(fullReset||!portions.length)resetPortions();optimizePortions();renderMeals();if(insulinOn&&$('insMeal').value!=='manual')mealEstimate()}
+function planAdjust(fullReset=false){if(!values)return;
+ // Always start with the currently selected recipes so every calorie target
+ // yields consistent portions, including after moving a deficit up and down.
+ resetPortions();optimizePortions();renderMeals();if(insulinOn&&$('insMeal').value!=='manual')mealEstimate()}
 function renderMeals(){menu.forEach((m,i)=>{
  const sel=$('meal'+i),idx=Number(sel.value),items=portions[i],tot=tally(items);
  sel.options[idx].textContent=`${idx+1}. ${items.map(ingredientText).join(' + ')}`;
@@ -331,14 +353,23 @@ function medsFor(){const m=[];if(conditions.has('t2d'))m.push('If taking metform
  if(conditions.has('hf')||conditions.has('cad'))m.push('If taking diuretics, ACEi/ARB/ARNI or mineralocorticoid antagonists: monitor potassium, sodium and renal function; if taking antiplatelets or anticoagulants, review interactions with supplements.');
  if(conditions.has('pcos'))m.push('Some patients with PCOS take metformin (B12 consideration) or other treatments; confirm regimen and pregnancy intentions before nutrition advice.');return m.length?m:['No medications inferred. Confirm the current medication list, allergies and laboratory results before prescribing.']}
 function getGoals(v){const goals=[];if(v.goal==='lose'||v.goal==='recomp'){goals.push(`Aim for ~5–7% body-weight reduction (${round(v.w*.05,1)}–${round(v.w*.07,1)} kg) over 3–6 months if clinically appropriate; monitor for muscle loss.`)}else if(v.goal==='gain'){goals.push('Aim for a gradual gain of approximately 0.1–0.25% body weight per week; adjust the surplus based on progress.')}else goals.push('Maintain body weight within approximately ±2% while monitoring waist and strength.');goals.push('Record weight trend and waist circumference every 2–4 weeks; review nutrition targets after 4 weeks.');goals.push('Aim for at least 150 minutes/week of moderate activity and 2 or more days of muscle-strengthening exercise, as tolerated.');if(conditions.has('t2d'))goals.push('Review glucose records and individualized HbA1c targets with the diabetes care team.');return goals}
+const macroSplits={lose:{p:35,c:35,f:30},maintain:{p:30,c:40,f:30},gain:{p:30,c:50,f:20},recomp:{p:35,c:40,f:25}};
 function calculate(){const age=+$('age').value,w=+$('weight').value,h=+$('height').value,a=+$('activity').value,goal=$('goal').value;const valid=Number.isFinite(age)&&age>=18&&age<=110&&w>=20&&w<=450&&h>=100&&h<=250;const warning=$('alert');if(!valid){warning.style.display='block';warning.textContent='Enter valid adult patient measurements (age 18–110 years, weight 20–450 kg, height 100–250 cm). Calculations are paused.';return}warning.style.display='none';const bmi=w/(h/100)**2,inch=h/2.54,ibw=Math.max(0,(sex==='male'?48:45.5)+(inch-60)*(sex==='male'?2.7:2.2)),adj=ibw+0.25*(w-ibw),bee=10*w+6.25*h-5*age+(sex==='male'?5:-161),tee=bee*a;let adjustment={lose:-450,recomp:-250,maintain:0,gain:250}[goal];if($('adjust').value!=='auto')adjustment=+$('adjust').value;const target=tee+adjustment;
- let pk={lose:1.7,recomp:1.8,maintain:1.2,gain:1.7}[goal];
- // In adults with documented stable non-dialysis CKD G3–G4, show a provisional renal target.
- // In obesity the adjusted weight is a screening basis only; clinical validation is required.
- let proteinBasis=w,proteinRule='goal-based';
- if(crohnFlare()&&!ckdG34()){pk=Math.max(pk,1.3);proteinRule='Crohn flare screening';}
- if(ckdG34()){pk=0.8;proteinBasis=bmi>=30?adj:w;proteinRule='provisional CKD G3–G4 screening';}
- const p=pk*proteinBasis;let fp=conditions.has('t2d')?0.32:0.30;const f=target*fp/9,c=(target-4*p-9*f)/4;const v={age,w,h,a,goal,bmi,ibw,adj,bee,tee,target,p,f,c,fp,pk,proteinBasis,proteinRule,adjustment,cat:BMIcat(bmi)};values=v;
+ const split=macroSplits[goal];
+ // For all four goals, percentages stay constant when calories change.
+ // Convert the allocation to grams with 4/4/9 kcal per gram.
+ let p=target*split.p/100/4;
+ let c=target*split.c/100/4;
+ const f=target*split.f/100/9;
+ let proteinBasis=w,pk=Math.round(p/w*100)/100,proteinRule='fixed goal percentage';
+ // Clinical safeguard: stable non-dialysis CKD G3–G4 needs an independently
+ // reviewed protein estimate, so it takes precedence over a fitness macro preset.
+ if(ckdG34()){
+  pk=0.8;proteinBasis=bmi>=30?adj:w;proteinRule='provisional CKD G3–G4 screening';
+  p=pk*proteinBasis;c=(target-4*p-9*f)/4;
+ }
+ const fp=split.f/100;
+ const v={age,w,h,a,goal,bmi,ibw,adj,bee,tee,target,p,f,c,fp,pk,proteinBasis,proteinRule,adjustment,split,cat:BMIcat(bmi)};values=v;
  if(target<=0||c<0){warning.style.display='block';warning.textContent='Energy or carbohydrate target is not physiologically reasonable. Reassess calorie adjustment and medical context.'}
  const headings={lose:'Weight management',recomp:'Body recomposition',maintain:'Weight maintenance',gain:'Muscle & weight gain'};$('heroHeading').textContent=headings[goal];$('heroCopy').textContent=conditions.size?`Personalized estimate with ${conditions.size} medical consideration${conditions.size===1?'':'s'} requiring clinical review.`:'Evidence-informed calorie and macro estimates, tailored to the patient’s profile and goal.';$('heroHint').textContent=`${$('activity').selectedOptions[0].text.split(' ·')[0]} activity · ${adjustment<0?round(-adjustment)+' kcal deficit':adjustment>0?'+'+round(adjustment)+' kcal surplus':'maintenance'}`;
  $('heroCalories').textContent=round(target);$('heroBmi').textContent=round(bmi,1);$('heroProtein').textContent=`${round(p)} g`;const pct=Math.max(0,Math.min(130,target/tee*100));$('ringPct').textContent=`${round(pct)}%`;$('ring').setAttribute('stroke-dasharray',`${Math.min(308,308*pct/100)} 308`);
@@ -346,7 +377,7 @@ function calculate(){const age=+$('age').value,w=+$('weight').value,h=+$('height
  const share=[p*4/target*100,c*4/target*100,f*9/target*100];$('pDetail').innerHTML=`${round(p)} g <small>${round(share[0])}% kcal</small>`;$('cDetail').innerHTML=`${round(c)} g <small>${round(share[1])}% kcal</small>`;$('fDetail').innerHTML=`${round(f)} g <small>${round(share[2])}% kcal</small>`;['p','c','f'].forEach((k,i)=>$(k+'Bar').style.width=`${Math.max(0,Math.min(100,share[i]))}%`);
  $('fiber').textContent=ckdG34()||crohnFlare()?'Individualize':'25–35 g/day';$('fluid').textContent=conditions.has('ckd')||conditions.has('cardiac')||conditions.has('hf')||crohnFlare()?'Per clinical status':'~2–3 L/day*';
  $('bmiMath').textContent=`${w} ÷ (${round(h/100,2)}²) = ${round(bmi,1)}`;$('adjMath').textContent=`${round(ibw,1)} + 0.25×(${w} − ${round(ibw,1)}) = ${round(adj,1)} kg`;$('beeMath').textContent=`10×${w} + 6.25×${h} − 5×${age} ${sex==='male'?'+ 5':'− 161'} = ${round(bee)} kcal`;$('teeMath').textContent=`${round(bee)} × ${a} = ${round(tee)}; ${adjustment>=0?'+':'−'} ${Math.abs(adjustment)} = ${round(target)} kcal`;
- const cautions=[];if(ckdG34())cautions.push(`CKD G3–G4: provisional protein ${round(pk)} g/kg × ${round(proteinBasis,1)} kg screening basis = ${round(p)} g/day; MUST confirm clinical nutrition requirements and weight basis.`);if(conditions.has('ckd')&&!ckdG34())cautions.push('CKD: stage 1–2 or unknown does not automatically trigger protein restriction. Verify stage and clinical context.');if(target<(sex==='male'?1500:1200))cautions.push('Low daily energy target: clinician review recommended before prescribing.');if(h<152.4)cautions.push('Hamwi IBW is extrapolated below 5 ft; interpret cautiously.');if(bmi>=25)cautions.push('BMI can overestimate adiposity in muscular individuals.');if(conditions.has('cardiac')||conditions.has('hf'))cautions.push('Fluid recommendation must follow cardiac/volume assessment.');if(crohnFlare()&&adjustment<0)cautions.push('Crohn flare with calorie deficit: reassess energy prescription before patient use.');$('caution').textContent=cautions.join(' ');renderClinicalAlerts(v);
+ const cautions=[];if(ckdG34())cautions.push(`CKD G3–G4: provisional protein ${round(pk,2)} g/kg × ${round(proteinBasis,1)} kg screening basis = ${round(p)} g/day. This renal safeguard overrides the goal-based macro percentages; MUST confirm clinical nutrition requirements and weight basis.`);if(conditions.has('ckd')&&!ckdG34())cautions.push('CKD: stage 1–2 or unknown does not automatically trigger protein restriction. Verify stage and clinical context.');if(target<(sex==='male'?1500:1200))cautions.push('Low daily energy target: clinician review recommended before prescribing.');if(h<152.4)cautions.push('Hamwi IBW is extrapolated below 5 ft; interpret cautiously.');if(bmi>=25)cautions.push('BMI can overestimate adiposity in muscular individuals.');if(conditions.has('cardiac')||conditions.has('hf'))cautions.push('Fluid recommendation must follow cardiac/volume assessment.');if(crohnFlare()&&adjustment<0)cautions.push('Crohn flare with calorie deficit: reassess energy prescription before patient use.');if(crohnFlare()&&!ckdG34()&&pk<1.3)cautions.push('Crohn flare: this fixed goal protein ratio may fall below 1.3 g/kg; clinical review needed before prescribing.');$('caution').textContent=cautions.join(' ');renderClinicalAlerts(v);
  const problem=bmi>=30?'Obesity':bmi>=25?'Overweight':bmi<18.5?'Underweight':'Weight management need';const dx=Array.from(conditions).map(k=>conditionLabels[k]);const related=goal==='gain'?'potentially insufficient energy intake relative to goals':goal==='maintain'?'need for individualized energy-balance planning':'suspected energy imbalance (etiology not yet confirmed by dietary history)';let pes=`${problem}${dx.length?' with '+dx.join(', '):''} related to ${related}, as evidenced by BMI ${round(bmi,1)} kg/m² and body weight ${round(w,1)} kg.`;if(conditions.has('ckd'))pes+=` Renal nutrition risk requires stage (${activeRenalStage().toUpperCase()}), urine albumin and laboratory assessment.`;if(crohnFlare())pes+=' Active Crohn’s: assess nutritional status, intake, inflammation and GI tolerance; BMI alone is not evidence of malnutrition.';if(conditions.has('celiac'))pes+=' Celiac disease requires confirmed gluten-free adherence assessment; no nonadherence is assumed.';
  $('pes').value=pes;$('recommendation').value=`Provide an individualized ${round(target)} kcal/day nutrition plan (estimated TEE ${round(tee)} kcal/day), with ~${round(p)} g protein, ${round(c)} g carbohydrate and ${round(f)} g fat daily. Aim for ${goal==='lose'?'gradual fat loss while preserving lean mass':goal==='recomp'?'muscle preservation and improvement in body composition':goal==='gain'?'gradual weight/muscle gain':'weight maintenance'}. Reassess weight trend, waist circumference, diet tolerance and activity after 4 weeks.${conditions.has('ckd')?' Renal targets require specialist verification.':''}${conditions.has('celiac')?' Enforce verified gluten-free foods and assess cross-contact.':''}${crohnFlare()?' Active Crohn disease requires individualized protein/energy and food tolerance review.':''}${clinicalAlerts(v).length?' Review condition-specific warnings before using as a prescription.':''}`;
  updateConditionUI();$('smart').innerHTML=getGoals(v).map(s=>`<li>${e(s)}</li>`).join('');$('guidance').innerHTML=guidanceFor(v).map(s=>`<li>${e(s)}</li>`).join('');$('medications').innerHTML=medsFor().map(s=>`<li>${e(s)}</li>`).join('');planAdjust();}
